@@ -19,14 +19,14 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-package org.snow.odinms;
+package org.snow.maplesnowsniffer;
 
 import java.io.IOException;
 import jpcap.JpcapCaptor;
 import jpcap.NetworkInterface;
 import jpcap.NetworkInterfaceAddress;
 
-public class ListDevices {
+public class ListDevicesOld {
 
     private static NetworkInterface[] devices = JpcapCaptor.getDeviceList();
 

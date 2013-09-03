@@ -5,10 +5,6 @@
 
 package org.snow.maplesnowsniffer;
 
-import org.snow.odinms.ListDevices;
-import org.snow.odinms.MapleOpcodeView;
-import org.snow.odinms.MaplePcapture;
-
 /**
  *
  * @author Raz
@@ -30,7 +26,7 @@ public class Main {
                 if (program.equals("sniffer")) {
                  MaplePcapture.main(argsNew);
                 } else if (program.equals("listdevices")) {
-                    ListDevices.main(argsNew);
+                    ListDevicesOld.main(argsNew);
                 } else if (program.equals("opcodeview")) {
                     MapleOpcodeView.main(argsNew);
                 } else {

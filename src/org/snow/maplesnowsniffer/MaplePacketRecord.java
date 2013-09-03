@@ -1,35 +1,15 @@
-/*
-	This file is part of the OdinMS Maple Story Server
-    Copyright (C) 2008 Patrick Huy <patrick.huy@frz.cc> 
-                       Matthias Butz <matze@odinms.de>
-                       Jan Christian Meyer <vimes@odinms.de>
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License version 3
-    as published by the Free Software Foundation. You may not use, modify
-    or distribute this program under any other version of the
-    GNU Affero General Public License.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-package org.snow.odinms;
+package org.snow.maplesnowsniffer;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeModel;
-
 import jpcap.packet.TCPPacket;
+import org.snow.odinms.HexTool;
+import org.snow.odinms.StringUtil;
 
 /**
  *
@@ -45,8 +25,10 @@ public class MaplePacketRecord {
     private String header;
     private int opcode;
     private byte[] packetData;
+    private String[] treeData;
     private boolean send;
     private boolean dataRecord = true;
+    private boolean loadFromFile = false;
     protected static long count = 0;
     protected static List<MaplePacketRecord> records = new ArrayList<MaplePacketRecord>();
 
@@ -163,6 +145,10 @@ public class MaplePacketRecord {
     public void setSend(boolean send) {
 	this.send = send;
     }
+    
+    public void setLoadFromFile(boolean load) {
+        this.loadFromFile = load;
+    }
 
     public TreeModel getTreeModel() {
 	DefaultMutableTreeNode root = new DefaultMutableTreeNode("Packet");
@@ -173,13 +159,26 @@ public class MaplePacketRecord {
 	root.add(new DefaultMutableTreeNode("Header-Desc: " + getHeader()));
 	DefaultMutableTreeNode ipNode = new DefaultMutableTreeNode("Network-Data");
 	root.add(ipNode);
+        if (loadFromFile) {
+        ipNode.add(new DefaultMutableTreeNode("Src-IP: " + treeData[0].toString().substring(1)));
+	ipNode.add(new DefaultMutableTreeNode("Src-Port: " + treeData[1]));
+	ipNode.add(new DefaultMutableTreeNode("Dst-IP: " + treeData[2].toString().substring(1)));
+	ipNode.add(new DefaultMutableTreeNode("Dst-Port: " + treeData[3]));
+	ipNode.add(new DefaultMutableTreeNode("Sec: " + treeData[4]));
+	ipNode.add(new DefaultMutableTreeNode("USec: " + treeData[5]));
+        } else {
 	ipNode.add(new DefaultMutableTreeNode("Src-IP: " + getPacket().src_ip.toString().substring(1)));
 	ipNode.add(new DefaultMutableTreeNode("Src-Port: " + getPacket().src_port));
 	ipNode.add(new DefaultMutableTreeNode("Dst-IP: " + getPacket().dst_ip.toString().substring(1)));
 	ipNode.add(new DefaultMutableTreeNode("Dst-Port: " + getPacket().dst_port));
 	ipNode.add(new DefaultMutableTreeNode("Sec: " + getPacket().sec));
 	ipNode.add(new DefaultMutableTreeNode("USec: " + getPacket().usec));
+        }
 	return new DefaultTreeModel(root);
+    }
+    
+    public void setTreeData(String[] data) {
+        this.treeData = data;
     }
 
     public Object[] getRowData() {

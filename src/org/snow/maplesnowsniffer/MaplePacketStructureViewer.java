@@ -1,32 +1,15 @@
-/*
-	This file is part of the OdinMS Maple Story Server
-    Copyright (C) 2008 Patrick Huy <patrick.huy@frz.cc> 
-                       Matthias Butz <matze@odinms.de>
-                       Jan Christian Meyer <vimes@odinms.de>
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License version 3
-    as published by the Free Software Foundation. You may not use, modify
-    or distribute this program under any other version of the
-    GNU Affero General Public License.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-package org.snow.odinms;
+package org.snow.maplesnowsniffer;
 
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
-
 import javax.swing.JOptionPane;
-import org.snow.odinms.MapleWorld.WorldStatusType;
+import org.snow.odinms.HexTool;
+import org.snow.odinms.MapleJob;
+import org.snow.odinms.MapleSkinColor;
+import org.snow.odinms.RecvPacketOpcode;
+import org.snow.odinms.SeekableLittleEndianAccessor;
+import org.snow.odinms.SendPacketOpcode;
 
 /**
  *
@@ -43,11 +26,24 @@ public class MaplePacketStructureViewer extends javax.swing.JFrame {
 
 	/** Creates new form MaplePacketStructureViewer */
 	public MaplePacketStructureViewer() {
-		try {
-			javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName());
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+            // <editor-fold defaultstate="collapsed" desc="LookAndFeelInfo">
+        try {
+            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
+                if ("Windows".equals(info.getName())) {
+                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
+            }
+        } catch (ClassNotFoundException ex) {
+            java.util.logging.Logger.getLogger(MaplePacketStructureViewer.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        } catch (InstantiationException ex) {
+            java.util.logging.Logger.getLogger(MaplePacketStructureViewer.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        } catch (IllegalAccessException ex) {
+            java.util.logging.Logger.getLogger(MaplePacketStructureViewer.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        } catch (javax.swing.UnsupportedLookAndFeelException ex) {
+            java.util.logging.Logger.getLogger(MaplePacketStructureViewer.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        }
+        // </editor-fold>
 		initComponents();
 	}
 
@@ -180,17 +176,19 @@ public class MaplePacketStructureViewer extends javax.swing.JFrame {
 			handleToClient(opcode);
 		}
 		if (slea.available() > 0) {
-			builder.append("\r\nREMAINING_BYTES - " + slea.available());
+			builder.append("\r\nRemaining Bytes : " + slea.available());
 		}
 		packetStructureTextArea.setText(builder.toString());
+                MaplePcaptureGUI.jTextArea1.setText(builder.toString());
 	}
 
 	public StringBuilder handleToClient(SendPacketOpcode opcode) {
-		builder.append("HEADER - Short(2) - " + opcode.name() + "(" + HexTool.getOpcodeToString((short) opcode.getValue()) + ")" + NEW_LINE);
-		switch (opcode) {
+		builder.append("Header : " + HexTool.getOpcodeToString((short) opcode.getValue()) + " ( " + opcode.name() + " )" + NEW_LINE);
+		//<editor-fold defaultstate="collapsed" desc=" Switch Opcode ">
+                /*switch (opcode) {
 			case PING:
-			case FORCED_MAP_EQUIP:
-			case LUCKSACK_FAIL:
+			//case FORCED_MAP_EQUIP:
+			//case LUCKSACK_FAIL:
 				//NOTHING
 				break;
 			case SERVERLIST:
@@ -465,10 +463,10 @@ public class MaplePacketStructureViewer extends javax.swing.JFrame {
 					builder.append("TODO" + NEW_LINE);
 				}
 				break;
-			case ZAKUM_SHRINE:
-				builder.append("TICKS - Byte(1) - " + slea.readByte() + NEW_LINE);
-				builder.append("TIME_LEFT - Int(4) - " + slea.readInt() + NEW_LINE);
-				break;
+			//case ZAKUM_SHRINE:
+			//	builder.append("TICKS - Byte(1) - " + slea.readByte() + NEW_LINE);
+			//	builder.append("TIME_LEFT - Int(4) - " + slea.readInt() + NEW_LINE);
+			//	break;
 			case SERVERMESSAGE:
 				int messageType = slea.readByte();
 				String messageTypeStr = "UNKNOWN";
@@ -511,17 +509,19 @@ public class MaplePacketStructureViewer extends javax.swing.JFrame {
 				//NOTHING? YET!
 				builder.append("Un-Analyzable Packet" + NEW_LINE);
 				break;
-		}
+		}*/
+                //</editor-fold>
 		return builder;
 	}
 
 	public StringBuilder handleToServer(RecvPacketOpcode opcode) {
-		builder.append("HEADER - Short(2) - " + opcode.name() + "(" + HexTool.getOpcodeToString((short) opcode.getValue()) + ")" + NEW_LINE);
-		switch (opcode) {
+		builder.append("Header : " + HexTool.getOpcodeToString((short) opcode.getValue()) + " ( " + opcode.name() + " ) " + NEW_LINE);
+		//<editor-fold defaultstate="collapsed" desc=" Switch Opcode ">
+                /*switch (opcode) {
 			case PONG:
-			case RELOG:
+			//case RELOG:
 			case SERVERLIST_REQUEST:
-			case SERVERLIST_REREQUEST:
+			//case SERVERLIST_REREQUEST:
 			case ENTER_CASH_SHOP:
 			case ENTER_MTS:
 			case CLOSE_CHALKBOARD:
@@ -542,7 +542,7 @@ public class MaplePacketStructureViewer extends javax.swing.JFrame {
 				builder.append("IDATE - Int(4) - " + slea.readInt() + NEW_LINE);
 				builder.append("CHARACTER_ID - Int(4) - " + slea.readInt() + NEW_LINE);
 				break;
-			case REGISTER_PIN:
+			/*case REGISTER_PIN:
 				builder.append("PIN_STATUS - Byte(1) - " + slea.readByte() + NEW_LINE);
 				builder.append("PIN - MapleAsciiString - " + slea.readMapleAsciiString() + NEW_LINE);
 				break;
@@ -561,7 +561,7 @@ public class MaplePacketStructureViewer extends javax.swing.JFrame {
 					builder.append("PIN - MapleAsciiString - " + slea.readMapleAsciiString() + NEW_LINE);
 				}
 				break;
-			}
+			}*
 			case SERVERSTATUS_REQUEST:
 				builder.append("WORLD_ID - Byte(1) - " + slea.readByte() + NEW_LINE);
 				break;
@@ -601,7 +601,7 @@ public class MaplePacketStructureViewer extends javax.swing.JFrame {
 			case DISTRIBUTE_AP:
 				builder.append("UNKNOWN - Int(4) - " + slea.readInt() + NEW_LINE);
 				MapleStat stat = MapleStat.getByValue(slea.readInt());
-				builder.append("UPDATED_STAT - Int(4) - " + Integer.toHexString(stat.getValue()).toUpperCase() + "(" + stat.name() + ")" + NEW_LINE);
+				//builder.append("UPDATED_STAT - Int(4) - " + Integer.toHexString(stat.getValue()).toUpperCase() + "(" + stat.name() + ")" + NEW_LINE);
 				break;
 			case DISTRIBUTE_SP:
 				builder.append("UNKNOWN - Int(4) - " + slea.readInt() + NEW_LINE);
@@ -677,7 +677,7 @@ public class MaplePacketStructureViewer extends javax.swing.JFrame {
 			case USE_SKILL_BOOK:
 			case USE_SUMMON_BAG:
 			case USE_MOUNT_FOOD:
-			case USE_PET_FOOD:
+			//case USE_PET_FOOD:
 			case USE_ITEM:
 				builder.append("UNKNOWN - Int(4) - " + slea.readInt() + NEW_LINE);
 				builder.append("SLOT - Short(2) - " + slea.readShort() + NEW_LINE);
@@ -795,7 +795,8 @@ public class MaplePacketStructureViewer extends javax.swing.JFrame {
 			default:
 				builder.append("Un-Analyzable Packet" + NEW_LINE);
 				break;
-		}
+		}*/
+                //</editor-fold>
 		return builder;
 	}
 
