@@ -420,7 +420,7 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
 
 	private void aboutMenuItemActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_aboutMenuItemActionPerformed
             //ABOUT
-            JOptionPane.showMessageDialog(null, Lang.get("main.menu.about.text"), "About", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(null, Lang.get("main.menu.about.text")+"\r\n"+Lang.get("main.menu.about.text2")+"\r\n"+Lang.get("main.menu.about.text3"), "About", JOptionPane.INFORMATION_MESSAGE);
 }//GEN-LAST:event_aboutMenuItemActionPerformed
 
 	private void viewSettingsMenuItemActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_viewSettingsMenuItemActionPerformed
