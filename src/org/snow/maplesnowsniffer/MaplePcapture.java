@@ -1,23 +1,3 @@
-/*
- This file is part of the OdinMS Maple Story Server
- Copyright (C) 2008 Patrick Huy <patrick.huy@frz.cc> 
- Matthias Butz <matze@odinms.de>
- Jan Christian Meyer <vimes@odinms.de>
-
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU Affero General Public License version 3
- as published by the Free Software Foundation. You may not use, modify
- or distribute this program under any other version of the
- GNU Affero General Public License.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU Affero General Public License for more details.
-
- You should have received a copy of the GNU Affero General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
 package org.snow.maplesnowsniffer;
 
 import java.io.BufferedWriter;
@@ -31,6 +11,7 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -44,14 +25,14 @@ import java.util.Properties;
 import java.util.Scanner;
 import javax.swing.JTable;
 import javax.swing.SwingWorker;
-
-import jpcap.JpcapCaptor;
-import jpcap.JpcapWriter;
-import jpcap.NetworkInterface;
-import jpcap.NetworkInterfaceAddress;
-import jpcap.PacketReceiver;
-import jpcap.packet.Packet;
-import jpcap.packet.TCPPacket;
+import org.jnetpcap.Pcap;
+import org.jnetpcap.PcapBpfProgram;
+import org.jnetpcap.PcapIf;
+import org.jnetpcap.packet.Payload;
+import org.jnetpcap.packet.PcapPacket;
+import org.jnetpcap.packet.PcapPacketHandler;
+import org.jnetpcap.protocol.network.Ip4;
+import org.jnetpcap.protocol.tcpip.Tcp;
 import org.snow.odinms.ByteArrayByteStream;
 import org.snow.odinms.GenericSeekableLittleEndianAccessor;
 import org.snow.odinms.HexTool;
@@ -63,48 +44,45 @@ import org.snow.odinms.SeekableLittleEndianAccessor;
 import org.snow.odinms.SendPacketOpcode;
 import org.snow.odinms.StringUtil;
 
-public class MaplePcapture implements PacketReceiver {
+public class MaplePcapture implements PcapPacketHandler {
 
     private MapleAESOFB send;
     private MapleAESOFB recv;
-    private ByteArrayOutputStream toClient;
-    private ByteArrayOutputStream toServer;
+    private ByteArrayOutputStream toClient = new ByteArrayOutputStream();
+    private ByteArrayOutputStream toServer = new ByteArrayOutputStream();
     private int toClientPos = 0;
     private int toServerPos = 0;
     private InetAddress ipclient = null;
     private InetAddress ipserver = null;
-    private boolean logging = false;
-    private BufferedWriter logStream = null;
-    private CaptureType capType;
-    private NetworkInterface[] devices = JpcapCaptor.getDeviceList();
-    private JpcapCaptor captor;
-    private List<MaplePacketRecord> packetRecords = new ArrayList<MaplePacketRecord>();
-    private String logFilename;
-    private boolean appendLogStream;
-    private String currentWriterName = null;
-    private boolean addedPrevEntries = false;
-    private Properties settings = new Properties();
-    private Properties blockOP = new Properties();
-    private PropertyTool propTool = new PropertyTool(new Properties());
-    private Scanner in = new Scanner(System.in);
+    private static boolean logging = false;
+    private static BufferedWriter logStream = null;
+    private static CaptureType capType;
+    private Pcap pcap;
+    private static List<MaplePacketRecord> packetRecords = new ArrayList<MaplePacketRecord>();
+    private static String logFilename;
+    private static boolean appendLogStream;
+    private static String currentWriterName = null;
+    private static boolean addedPrevEntries = false;
+    private static Properties settings = new Properties();
+    private static Properties blockOP = new Properties();
+    private static PropertyTool propTool = new PropertyTool(new Properties());
     private static MaplePcaptureGUI packetGUI;
-    private boolean useGUI = true;
-    private static MaplePcapture instance = new MaplePcapture();
+    private static boolean useGUI = true;
     private static List<Integer> storedShops = new ArrayList<Integer>();
-    private ServerOutputType serverOutputType;
-    private boolean showHex;
-    private boolean showAscii;
-    private Map<String, Boolean> blockedOpcodes = new HashMap<String, Boolean>();
-    private boolean blockDefault;
-    private int deviceIndex;
-    private String packetFilter;
-    private String lang;
-    private JTable table;
+    private static ServerOutputType serverOutputType;
+    private static boolean showHex;
+    private static boolean showAscii;
+    private static Map<String, Boolean> blockedOpcodes = new HashMap<String, Boolean>();
+    private static boolean blockDefault;
+    private static int deviceIndex;
+    private static String packetFilter;
+    private static String lang;
 
     public MaplePcapture() {
     }
 
     public static MaplePcapture getInstance() {
+        MaplePcapture instance = new MaplePcapture();
         return instance;
     }
 
@@ -115,7 +93,7 @@ public class MaplePcapture implements PacketReceiver {
     public void doCapture() {
         SwingWorker<Boolean, Void> worker = new SwingWorker<Boolean, Void>() {
             protected Boolean doInBackground() throws Exception {
-                captor.loopPacket(-1, getInstance());
+                pcap.loop(-1, getInstance(), null);//captor.loopPacket(-1, getInstance());
                 return true;
             }
 
@@ -145,8 +123,17 @@ public class MaplePcapture implements PacketReceiver {
                 packetGUI.setCapture(this);
                 packetGUI.setVisible(true);
             }
-            captor = JpcapCaptor.openDevice(devices[deviceIndex], 65535, false, 20);
-            captor.setFilter(packetFilter.toLowerCase(), true);
+            List<PcapIf> alldevs = new ArrayList<PcapIf>();
+            StringBuilder errbuf = new StringBuilder();
+            Pcap.findAllDevs(alldevs, errbuf);
+            int snaplen = 64 * 1024;           // Capture all packets, no trucation
+            int flags = Pcap.MODE_PROMISCUOUS; // capture all packets
+            int timeout = 10 * 1000;           // 10 seconds in millis
+            PcapIf device = alldevs.get(deviceIndex);
+            PcapBpfProgram program = new PcapBpfProgram();
+            pcap = Pcap.openLive(device.getName(), snaplen, flags, timeout, errbuf);//captor = JpcapCaptor.openDevice(devices[deviceIndex], 65535, false, 20);
+            pcap.compile(program, packetFilter.toLowerCase(), 0, 0xFFFFFF00);
+            pcap.setFilter(program);//captor.setFilter(packetFilter.toLowerCase(), true);
             doCapture();//captor.loopPacket(-1, this);
         } catch (Exception e) {
             e.printStackTrace();
@@ -208,82 +195,82 @@ public class MaplePcapture implements PacketReceiver {
         System.out.println(" | " + serverOutputType.name() + " | " + capType.name());
         return true;
     }
+    //Create packet handler which will receive packets
 
     @Override
-    public void receivePacket(Packet recvPacket) {
-        if (recvPacket instanceof TCPPacket) {
-            TCPPacket packet = (TCPPacket) recvPacket;
-            SeekableLittleEndianAccessor slea2 = new GenericSeekableLittleEndianAccessor(new ByteArrayByteStream(recvPacket.data));
-            SeekableLittleEndianAccessor slea = new GenericSeekableLittleEndianAccessor(new ByteArrayByteStream(packet.data));
+    public void nextPacket(PcapPacket packet, Object t) {
+        Ip4 ip = new Ip4();
+        Tcp tcp = new Tcp();
+        Payload payload = new Payload();
+        if (packet.hasHeader(ip) && packet.hasHeader(tcp) && packet.hasHeader(payload)) {
+            byte[] data = payload.getByteArray(0, payload.size());
+            byte[] sIP = packet.getHeader(ip).source();//src_ip
+            byte[] dIP = packet.getHeader(ip).destination();//dst_ip
+            SeekableLittleEndianAccessor slea = new GenericSeekableLittleEndianAccessor(new ByteArrayByteStream(data));
+            SeekableLittleEndianAccessor slea2 = new GenericSeekableLittleEndianAccessor(new ByteArrayByteStream(data));
             int opcode = slea.readShort();
-            if (opcode == slea.available()) {
-                System.out.println("Detected Maple Crypto - " + packet.src_ip);
-                byte[] getHello = slea2.read((int) slea2.available());
-                System.out.println("HELLO THERE! " + HexTool.toString(getHello));
-                short version = slea.readShort();
-                String maplePatch = slea.readMapleAsciiString();
-                byte ivsend[] = slea.read(4);//localIV
-                byte ivrecv[] = slea.read(4);//remoteIV
-                packetGUI.setSIVStr("SIV: " + HexTool.toString(ivsend));
-                packetGUI.setRIVStr("RIV: " + HexTool.toString(ivrecv));
-                MapleServerType serverType = MapleServerType.getByType(slea.readByte());
-                if (useGUI) {
-                    //MaplePacketRecord.setCount(-1);
-                    MaplePacketRecord record = new MaplePacketRecord();
-                    record.setCounter(MaplePacketRecord.getCountAndAdd());
-                    record.setDataRecord(true);
-                    record.setDirection("<NONE>");
-                    record.setTime(Calendar.getInstance().getTime());
-                    record.setHeader("MapleStory " + serverType.name() + "(V" + version + "." + maplePatch + ")");
-                    record.setOpcode(opcode);
-                    record.setPacketData(getHello);
-                    record.setPacket(packet);
+            try {
+                if (opcode == slea.available()) {
+                    System.out.println("Detected Maple Crypto - " + InetAddress.getByAddress(sIP));
+                    byte[] getHello = slea2.read((int) slea2.available());
+                    System.out.println("HELLO THERE! " + HexTool.toString(getHello));
+                    short version = slea.readShort();
+                    String maplePatch = slea.readMapleAsciiString();
+                    byte ivsend[] = slea.read(4);//localIV
+                    byte ivrecv[] = slea.read(4);//remoteIV
+                    packetGUI.setSIVStr("SIV: " + HexTool.toString(ivsend));
+                    packetGUI.setRIVStr("RIV: " + HexTool.toString(ivrecv));
+                    MapleServerType serverType = MapleServerType.getByType(slea.readByte());
+                    if (useGUI) {
+                        //MaplePacketRecord.setCount(-1);
+                        MaplePacketRecord record = new MaplePacketRecord();
+                        record.setCounter(MaplePacketRecord.getCountAndAdd());
+                        record.setDataRecord(true);
+                        record.setDirection("<NONE>");
+                        record.setTime(Calendar.getInstance().getTime());
+                        record.setHeader("MapleStory " + serverType.name() + "(V" + version + "." + maplePatch + ")");
+                        record.setOpcode(opcode);
+                        record.setPacketData(getHello);
+                        record.setPacket(packet);
 
-                    packetRecords.add(record);
-                    packetGUI.addRow(record);
-                    packetGUI.updateAndIncreasePacketTotal();
-                    packetGUI.setStatusText("Capturing: MapleStory(V" + version + "." + maplePatch + ") | " + serverType.name());
-                }
-                System.out.println("Maple Version " + version + "." + maplePatch + "  | Maple Server " + serverType.name());
-                send = new MapleAESOFB(ivsend, version);
-                recv = new MapleAESOFB(ivrecv, (short) (0xFFFF - version));
-                ipserver = packet.src_ip;
-                if (ipclient == null) {
-                    ipclient = packet.dst_ip;
-                }
-                toClient = new ByteArrayOutputStream();
-                toServer = new ByteArrayOutputStream();
-                toClientPos = 0;
-                toServerPos = 0;
-            } else {
-                if (send != null && (packet.src_ip.equals(ipserver) || packet.dst_ip.equals(ipserver))) {
+                        packetRecords.add(record);
+                        packetGUI.addRow(record);
+                        packetGUI.updateAndIncreasePacketTotal();
+                        packetGUI.setStatusText("Capturing: MapleStory(V" + version + "." + maplePatch + ") | " + serverType.name());
+                    }
+                    System.out.println("Maple Version " + version + "." + maplePatch + "  | Maple Server " + serverType.name());
+                    send = new MapleAESOFB(ivsend, version);
+                    recv = new MapleAESOFB(ivrecv, (short) (0xFFFF - version));
+                    ipserver = InetAddress.getByAddress(sIP);
+                    if (ipclient == null) {
+                        ipclient = InetAddress.getByAddress(dIP);
+                    }
+                } else {
+                    if (send != null && (InetAddress.getByAddress(sIP).equals(ipserver) || InetAddress.getByAddress(dIP).equals(ipserver))) {
 
-                    if (packet.src_ip.equals(ipserver) && (packet.dst_ip.equals(ipclient) || ipclient == null)) {
-                        try {
-                            toClient.write(packet.data);
-                        } catch (IOException e) {
-                            e.printStackTrace();
+                        if (InetAddress.getByAddress(sIP).equals(ipserver) && (InetAddress.getByAddress(dIP).equals(ipclient) || ipclient == null)) {
+                            toClient.write(data);
+                            int ret = 0;
+                            do {
+                                byte[] toClientArr = toClient.toByteArray();
+                                ret = handleData(toClientArr, toClientPos, recv, packet, false);//ToClient
+                                toClientPos += ret;
+                            } while (ret != 0);
+                        } else if ((InetAddress.getByAddress(sIP).equals(ipclient) || ipclient == null) && InetAddress.getByAddress(dIP).equals(ipserver)) {
+                            toServer.write(data);
+                            int ret = 0;
+                            do {
+                                byte[] toServerArr = toServer.toByteArray();
+                                ret = handleData(toServerArr, toServerPos, send, packet, true);//ToServer
+                                toServerPos += ret;
+                            } while (ret != 0);
                         }
-                        int ret = 0;
-                        do {
-                            byte[] toClientArr = toClient.toByteArray();
-                            ret = handleData(toClientArr, toClientPos, recv, packet, false);//ToClient
-                            toClientPos += ret;
-                        } while (ret != 0);
-                    } else if ((packet.src_ip.equals(ipclient) || ipclient == null) && packet.dst_ip.equals(ipserver)) {
-                        try {
-                            toServer.write(packet.data);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                        int ret = 0;
-                        do {
-                            byte[] toServerArr = toServer.toByteArray();
-                            ret = handleData(toServerArr, toServerPos, send, packet, true);//ToServer
-                            toServerPos += ret;
-                        } while (ret != 0);
                     }
                 }
+            } catch (UnknownHostException ex) {
+                ex.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }
@@ -319,19 +306,18 @@ public class MaplePcapture implements PacketReceiver {
                 packetRecords.add(record);
                 packetGUI.addRow(rowData);
                 //Load Packet Tree
-                record.setTreeData(rowData[7].toString().split("-"));
+                //record.setTreeData(rowData[7].toString().split("-"));
             }
             packetGUI.loadPacketTotal(lines.length);
         } catch (FileNotFoundException ex) {
             System.out.println("Error open packets file: " + ex);
-        } catch ( ParseException e){
+        } catch (ParseException e) {
             System.out.println("Error open packets file: " + e);
         }
     }
 
     public void dumpToFile(String fileName, JTable table) {
         try {
-            this.table = table;
             BufferedWriter bfw = new BufferedWriter(new FileWriter(fileName));
             for (int i = 0; i < table.getRowCount(); i++) {
                 MaplePacketRecord record = MaplePacketRecord.getById(i);
@@ -340,12 +326,12 @@ public class MaplePcapture implements PacketReceiver {
                     bfw.write("|");
                 }
                 bfw.write(HexTool.toString(record.getPacketData()) + "|");
-                bfw.write(record.getPacket().src_ip.toString().substring(1) + "-");
-                bfw.write(record.getPacket().src_port + "-");
-                bfw.write(record.getPacket().dst_ip.toString().substring(1) + "-");
-                bfw.write(record.getPacket().dst_port + "-");
-                bfw.write(record.getPacket().sec + "-");
-                bfw.write(record.getPacket().usec + "|");
+                /*bfw.write(record.getPacket().src_ip.toString().substring(1) + "-");
+                 bfw.write(record.getPacket().src_port + "-");
+                 bfw.write(record.getPacket().dst_ip.toString().substring(1) + "-");
+                 bfw.write(record.getPacket().dst_port + "-");
+                 bfw.write(record.getPacket().sec + "-");
+                 bfw.write(record.getPacket().usec + "|");*/
                 bfw.newLine();
             }
             bfw.close();
@@ -382,7 +368,7 @@ public class MaplePcapture implements PacketReceiver {
         return SendPacketOpcode.getByType(val).name();
     }
 
-    private int handleData(byte[] data, int skip, MapleAESOFB crypto, TCPPacket packet, boolean send) {
+    private int handleData(byte[] data, int skip, MapleAESOFB crypto, PcapPacket packet, boolean send) {
         if (data.length < skip + 4) {
             return 0;
         }
@@ -430,7 +416,7 @@ public class MaplePcapture implements PacketReceiver {
                                     if (useGUI) {
                                         MaplePacketRecord record = new MaplePacketRecord();
                                         record.setCounter(MaplePacketRecord.getCountAndAdd());
-                                        record.setTime(new Date(packet.sec * 1000 + packet.usec / 1000));
+                                        record.setTime(new Date(System.currentTimeMillis()));
                                         record.setDirection(send ? "ToServer" : "ToClient");
                                         record.setSend(send);
                                         record.setOpcode(pHeader);

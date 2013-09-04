@@ -7,7 +7,7 @@ import java.util.List;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeModel;
-import jpcap.packet.TCPPacket;
+import org.jnetpcap.packet.PcapPacket;
 import org.snow.odinms.HexTool;
 import org.snow.odinms.StringUtil;
 
@@ -18,7 +18,7 @@ import org.snow.odinms.StringUtil;
 public class MaplePacketRecord {
 
     private int id;
-    private TCPPacket packet;
+    private PcapPacket packet;
     private long counter;
     private Date time;
     private String direction;
@@ -110,11 +110,11 @@ public class MaplePacketRecord {
 	this.packetData = packetData;
     }
 
-    public TCPPacket getPacket() {
+    public PcapPacket getPacket() {
 	return packet;
     }
 
-    public void setPacket(TCPPacket packet) {
+    public void setPacket(PcapPacket packet) {
 	this.packet = packet;
     }
 
@@ -157,7 +157,7 @@ public class MaplePacketRecord {
 	root.add(new DefaultMutableTreeNode("Date: " + getTimeToString()));
 	root.add(new DefaultMutableTreeNode("Opcode: " + getOpcodeHex(true)));
 	root.add(new DefaultMutableTreeNode("Header-Desc: " + getHeader()));
-	DefaultMutableTreeNode ipNode = new DefaultMutableTreeNode("Network-Data");
+	/*DefaultMutableTreeNode ipNode = new DefaultMutableTreeNode("Network-Data");
 	root.add(ipNode);
         if (loadFromFile) {
         ipNode.add(new DefaultMutableTreeNode("Src-IP: " + treeData[0].toString().substring(1)));
@@ -173,7 +173,7 @@ public class MaplePacketRecord {
 	ipNode.add(new DefaultMutableTreeNode("Dst-Port: " + getPacket().dst_port));
 	ipNode.add(new DefaultMutableTreeNode("Sec: " + getPacket().sec));
 	ipNode.add(new DefaultMutableTreeNode("USec: " + getPacket().usec));
-        }
+        }*/
 	return new DefaultTreeModel(root);
     }
     

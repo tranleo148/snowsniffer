@@ -8,11 +8,13 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.Vector;
 import javax.swing.DefaultComboBoxModel;
-import jpcap.JpcapCaptor;
-import jpcap.NetworkInterface;
+import org.jnetpcap.Pcap;
+import org.jnetpcap.PcapIf;
 
 /**
  *
@@ -24,7 +26,7 @@ public class ListDevices extends javax.swing.JFrame {
     //Properties settings;
     private Properties settings = new Properties();
     private String lang = "";
-    private static NetworkInterface[] devices = JpcapCaptor.getDeviceList();
+
     /**
      * Creates new form ListDevices
      */
@@ -48,11 +50,19 @@ public class ListDevices extends javax.swing.JFrame {
         }
         // </editor-fold>
         initComponents();
-        Vector device = new Vector();
-        for (int i = 0; i < devices.length; i++) {
-            device.add(devices[i].description);
+        List<PcapIf> alldevs = new ArrayList<PcapIf>();
+        StringBuilder errbuf = new StringBuilder();
+        int devices = Pcap.findAllDevs(alldevs, errbuf);
+        if (devices == Pcap.NOT_OK || alldevs.isEmpty()) {
+            System.err.printf("Can't read list of devices, error is %s", errbuf.toString());
+            return;
+        } else {
+            Vector deviceModel = new Vector();
+            for (PcapIf device : alldevs) {
+                deviceModel.add(device.getDescription());
+            }
+            jComboBox1.setModel(new DefaultComboBoxModel(deviceModel));
         }
-        jComboBox1.setModel(new DefaultComboBoxModel(device));
     }
 
     /**
@@ -87,7 +97,7 @@ public class ListDevices extends javax.swing.JFrame {
         jLabel3.setText("jLabel3");
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-        setTitle("Maple Snow Sniffer [Upgrade Version 1.1]");
+        setTitle("Maple Snow Sniffer [Upgrade Version 1.2]");
         setResizable(false);
 
         jLabel1.setText(Lang.get("setting.text2"));
@@ -248,10 +258,10 @@ public class ListDevices extends javax.swing.JFrame {
             settings.setProperty("LOG_NAME", "log.txt");
             settings.setProperty("USE_GUI", "1");
             settings.setProperty("BLOCK_DEF", "0");
-            if(lang != null) {
-            settings.setProperty("LANGUAGE", lang);
+            if (lang != null) {
+                settings.setProperty("LANGUAGE", lang);
             } else {
-            settings.setProperty("LANGUAGE", "EN");
+                settings.setProperty("LANGUAGE", "EN");
             }
             settings.store(new FileOutputStream("settings.ini"), null);
             MaplePcapture.main(null);
@@ -270,13 +280,30 @@ public class ListDevices extends javax.swing.JFrame {
             System.out.println(e);
         }
         lang = prop.getProperty("LANGUAGE");
-    return true;
+        return true;
     }
-    
+
+    public static String detectOs() {
+        boolean is64bit = false;
+        if (System.getProperty("os.name").contains("Windows")) {
+            is64bit = (System.getenv("ProgramFiles(x86)") != null);
+        } else {
+            is64bit = (System.getProperty("os.arch").indexOf("64") != -1);
+        }
+        if (is64bit) {
+            System.out.println("Detected OS: " + System.getProperty("os.name") + " 64bit system");
+            return "jnetpcap64.dll";
+        } else {
+            System.out.println("Detected OS: " + System.getProperty("os.name") + " 32bit system");
+            return "jnetpcap.dll";
+        }
+    }
+
     /**
      * @param args the command line arguments
      */
     public static void main(String args[]) {
+        System.setProperty("java.library.path", detectOs());
         java.awt.EventQueue.invokeLater(new Runnable() {
             public void run() {
                 new ListDevices().setVisible(true);
