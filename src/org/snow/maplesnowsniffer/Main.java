@@ -26,7 +26,7 @@ public class Main {
                 if (program.equals("sniffer")) {
                  MaplePcapture.main(argsNew);
                 } else if (program.equals("listdevices")) {
-                    ListDevicesOld.main(argsNew);
+                    //ListDevicesOld.main(argsNew);
                 } else if (program.equals("opcodeview")) {
                     MapleOpcodeView.main(argsNew);
                 } else {

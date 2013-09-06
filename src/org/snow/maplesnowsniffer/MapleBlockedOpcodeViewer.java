@@ -113,6 +113,11 @@ public class MapleBlockedOpcodeViewer extends javax.swing.JFrame implements Tabl
         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
         setTitle("Snow's Packet Header Viewer");
         setResizable(false);
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            public void windowClosed(java.awt.event.WindowEvent evt) {
+                formWindowClosed(evt);
+            }
+        });
 
         opcodeTable.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
@@ -302,6 +307,11 @@ public class MapleBlockedOpcodeViewer extends javax.swing.JFrame implements Tabl
     private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
         JOptionPane.showMessageDialog(null, Lang.get("notDone"), "INFO", JOptionPane.INFORMATION_MESSAGE);
     }//GEN-LAST:event_jButton2ActionPerformed
+
+    private void formWindowClosed(java.awt.event.WindowEvent evt) {//GEN-FIRST:event_formWindowClosed
+        MaplePcaptureGUI.viewBlockedOpcodeButton.setEnabled(true);
+    }//GEN-LAST:event_formWindowClosed
+
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton closeButton;
     private javax.swing.JButton deleteButton;

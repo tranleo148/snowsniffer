@@ -283,27 +283,10 @@ public class ListDevices extends javax.swing.JFrame {
         return true;
     }
 
-    public static String detectOs() {
-        boolean is64bit = false;
-        if (System.getProperty("os.name").contains("Windows")) {
-            is64bit = (System.getenv("ProgramFiles(x86)") != null);
-        } else {
-            is64bit = (System.getProperty("os.arch").indexOf("64") != -1);
-        }
-        if (is64bit) {
-            System.out.println("Detected OS: " + System.getProperty("os.name") + " 64bit system");
-            return "jnetpcap64.dll";
-        } else {
-            System.out.println("Detected OS: " + System.getProperty("os.name") + " 32bit system");
-            return "jnetpcap.dll";
-        }
-    }
-
     /**
      * @param args the command line arguments
      */
     public static void main(String args[]) {
-        System.setProperty("java.library.path", detectOs());
         java.awt.EventQueue.invokeLater(new Runnable() {
             public void run() {
                 new ListDevices().setVisible(true);

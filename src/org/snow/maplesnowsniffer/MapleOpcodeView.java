@@ -79,6 +79,11 @@ public class MapleOpcodeView extends javax.swing.JFrame {
         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
         setTitle("Snow's Packet Header Viewer");
         setResizable(false);
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            public void windowClosed(java.awt.event.WindowEvent evt) {
+                formWindowClosed(evt);
+            }
+        });
 
         buttonGroup1.add(sendOpcodeRadioButton);
         sendOpcodeRadioButton.setSelected(true);
@@ -276,6 +281,10 @@ public class MapleOpcodeView extends javax.swing.JFrame {
             editOpcode(selectedRow);
         }
     }//GEN-LAST:event_opcodeTableMouseClicked
+
+    private void formWindowClosed(java.awt.event.WindowEvent evt) {//GEN-FIRST:event_formWindowClosed
+        MaplePcaptureGUI.viewPacketHeaderButton.setEnabled(true);
+    }//GEN-LAST:event_formWindowClosed
 
     public void editOpcode(int row) {
         DefaultTableModel dtm = (DefaultTableModel) opcodeTable.getModel();

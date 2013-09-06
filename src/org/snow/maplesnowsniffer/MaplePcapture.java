@@ -24,7 +24,6 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Scanner;
 import javax.swing.JTable;
-import javax.swing.SwingWorker;
 import org.jnetpcap.Pcap;
 import org.jnetpcap.PcapBpfProgram;
 import org.jnetpcap.PcapIf;
@@ -68,6 +67,7 @@ public class MaplePcapture implements PcapPacketHandler {
     private static PropertyTool propTool = new PropertyTool(new Properties());
     private static MaplePcaptureGUI packetGUI;
     private static boolean useGUI = true;
+    private static boolean resume = true;
     private static List<Integer> storedShops = new ArrayList<Integer>();
     private static ServerOutputType serverOutputType;
     private static boolean showHex;
@@ -88,24 +88,6 @@ public class MaplePcapture implements PcapPacketHandler {
 
     public static void main(String args[]) throws IOException {
         getInstance().doMain();
-    }
-
-    public void doCapture() {
-        SwingWorker<Boolean, Void> worker = new SwingWorker<Boolean, Void>() {
-            protected Boolean doInBackground() throws Exception {
-                pcap.loop(-1, getInstance(), null);//captor.loopPacket(-1, getInstance());
-                return true;
-            }
-
-            protected void done() {
-                try {
-                    packetGUI.statusLabel.setText(Lang.get("main.bar.status"));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        };
-        worker.execute();
     }
 
     public void doMain() {
@@ -134,7 +116,13 @@ public class MaplePcapture implements PcapPacketHandler {
             pcap = Pcap.openLive(device.getName(), snaplen, flags, timeout, errbuf);//captor = JpcapCaptor.openDevice(devices[deviceIndex], 65535, false, 20);
             pcap.compile(program, packetFilter.toLowerCase(), 0, 0xFFFFFF00);
             pcap.setFilter(program);//captor.setFilter(packetFilter.toLowerCase(), true);
-            doCapture();//captor.loopPacket(-1, this);
+            
+            Thread thread = new Thread() {
+                public void run() {
+                    pcap.loop(-1, getInstance(), null);//captor.loopPacket(-1, this);
+                }
+            };
+            thread.start();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -208,7 +196,12 @@ public class MaplePcapture implements PcapPacketHandler {
             byte[] dIP = packet.getHeader(ip).destination();//dst_ip
             SeekableLittleEndianAccessor slea = new GenericSeekableLittleEndianAccessor(new ByteArrayByteStream(data));
             SeekableLittleEndianAccessor slea2 = new GenericSeekableLittleEndianAccessor(new ByteArrayByteStream(data));
-            int opcode = slea.readShort();
+            long packetSize = slea.available();
+            int opcode = 0;
+            if (packetSize < 2) 
+                return;
+            else
+                opcode = slea.readShort();
             try {
                 if (opcode == slea.available()) {
                     System.out.println("Detected Maple Crypto - " + InetAddress.getByAddress(sIP));
@@ -221,6 +214,7 @@ public class MaplePcapture implements PcapPacketHandler {
                     packetGUI.setSIVStr("SIV: " + HexTool.toString(ivsend));
                     packetGUI.setRIVStr("RIV: " + HexTool.toString(ivrecv));
                     MapleServerType serverType = MapleServerType.getByType(slea.readByte());
+                    System.out.println("Maple Version " + version + "." + maplePatch + "  | Maple Server " + serverType.name());
                     if (useGUI) {
                         //MaplePacketRecord.setCount(-1);
                         MaplePacketRecord record = new MaplePacketRecord();
@@ -238,7 +232,6 @@ public class MaplePcapture implements PcapPacketHandler {
                         packetGUI.updateAndIncreasePacketTotal();
                         packetGUI.setStatusText("Capturing: MapleStory(V" + version + "." + maplePatch + ") | " + serverType.name());
                     }
-                    System.out.println("Maple Version " + version + "." + maplePatch + "  | Maple Server " + serverType.name());
                     send = new MapleAESOFB(ivsend, version);
                     recv = new MapleAESOFB(ivrecv, (short) (0xFFFF - version));
                     ipserver = InetAddress.getByAddress(sIP);
@@ -273,6 +266,107 @@ public class MaplePcapture implements PcapPacketHandler {
                 e.printStackTrace();
             }
         }
+    }
+
+    private int handleData(byte[] data, int skip, MapleAESOFB crypto, PcapPacket packet, boolean send) {
+        if (data.length < skip + 4) {
+            return 0;
+        }
+        DataInputStream dis = new DataInputStream(new ByteArrayInputStream(data));
+        byte[] header = new byte[4];
+        try {
+            dis.skip(skip);
+            dis.readFully(header);
+        } catch (IOException e) {
+            e.printStackTrace();// I don't know why the exception happens but it doesn't really matter o.o"
+        }
+
+        if (crypto.checkPacket(header)) {//ConfirmHeader
+            int packetSize = MapleAESOFB.getPacketLength(header);//GetHeaderLength
+            try {
+                if (dis.available() >= packetSize) {
+                    byte ddata[] = new byte[packetSize];
+                    dis.readFully(ddata);
+
+                    byte unc[] = new byte[ddata.length];
+                    System.arraycopy(ddata, 0, unc, 0, ddata.length);
+
+                    crypto.crypt(ddata);//TransformAES(pBuffer)
+
+                    MapleCustomEncryption.decryptData(ddata);//ok
+                    SeekableLittleEndianAccessor slea = new GenericSeekableLittleEndianAccessor(new ByteArrayByteStream(ddata));
+
+                    int pHeader = slea.readShort();
+                    String opCode = StringUtil.getLeftPaddedStr(Integer.toHexString(pHeader).toUpperCase(), '0', 4);
+                    String opName = send ? lookupRecv(pHeader) : lookupSend(pHeader);
+                    String start = send ? "Sent " : "Received ";
+                    String strStart = start.substring(0, 1);
+                    try {
+                        //FILTER PACKETS
+                        switch (capType) {
+                            case PACKET:
+                                boolean opcodeBlocked;
+                                if (opName.equals("UNKNOWN")) {
+                                    opcodeBlocked = blockedOpcodes.containsKey(strStart + "_" + opCode) ? blockedOpcodes.get(strStart + "_" + opCode) : blockDefault;
+                                } else {
+                                    opcodeBlocked = blockedOpcodes.containsKey(strStart + "_" + opName) ? blockedOpcodes.get(strStart + "_" + opName) : blockDefault;
+                                }
+                                if (!opcodeBlocked && resume) {
+                                    outputWithLogging(start + opName + " [" + opCode + "] (" + packetSize + ") ");
+                                    if (useGUI) {
+                                        MaplePacketRecord record = new MaplePacketRecord();
+                                        record.setCounter(MaplePacketRecord.getCountAndAdd());
+                                        record.setTime(new Date(System.currentTimeMillis()));
+                                        record.setDirection(send ? "ToServer" : "ToClient");
+                                        record.setSend(send);
+                                        record.setOpcode(pHeader);
+                                        record.setHeader(opName);
+                                        record.setPacketData(ddata);
+                                        record.setPacket(packet);
+                                        packetGUI.addRow(record);
+                                        packetGUI.updateAndIncreasePacketTotal();
+                                    }
+                                    if (showHex) {
+                                        outputWithLogging(HexTool.toString(ddata));
+                                    }
+                                    if (showAscii) {
+                                        outputWithLogging(HexTool.toStringFromAscii(ddata));
+                                    }
+                                    outputWithLogging("");
+                                }
+                                break;
+                            case NPC:
+                                if (pHeader == SendPacketOpcode.NPC_TALK.getValue()) {
+                                    addText(slea);
+                                    System.out.println();
+                                }
+                                break;
+                            case SHOP:
+                                if (pHeader == SendPacketOpcode.OPEN_NPC_SHOP.getValue()) {
+                                    addShopSqlQuery(slea);
+                                    outputWithLogging("");
+                                }
+                                break;
+                            case SPEED_QUIZ:
+                                if (pHeader == SendPacketOpcode.NPC_TALK.getValue()) {
+                                    addText(slea);//////////
+                                    System.out.println();
+                                }
+                                break;
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    return packetSize + 4;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            //outputWithLogging("Warning: Packet check failed");
+            return 4; // consume the header and hope that it was a retransmission o.o
+        }
+        return 0;
     }
 
     public void loadFromFile(String fileName) {
@@ -366,107 +460,6 @@ public class MaplePcapture implements PcapPacketHandler {
 
     private String lookupSend(int val) {
         return SendPacketOpcode.getByType(val).name();
-    }
-
-    private int handleData(byte[] data, int skip, MapleAESOFB crypto, PcapPacket packet, boolean send) {
-        if (data.length < skip + 4) {
-            return 0;
-        }
-        DataInputStream dis = new DataInputStream(new ByteArrayInputStream(data));
-        byte[] header = new byte[4];
-        try {
-            dis.skip(skip);
-            dis.readFully(header);
-        } catch (IOException e) {
-            e.printStackTrace();// I don't know why the exception happens but it doesn't really matter o.o"
-        }
-
-        if (crypto.checkPacket(header)) {//ConfirmHeader
-            int packetSize = MapleAESOFB.getPacketLength(header);//GetHeaderLength
-            try {
-                if (dis.available() >= packetSize) {
-                    byte ddata[] = new byte[packetSize];
-                    dis.readFully(ddata);
-
-                    byte unc[] = new byte[ddata.length];
-                    System.arraycopy(ddata, 0, unc, 0, ddata.length);
-
-                    crypto.crypt(ddata);//TransformAES(pBuffer)
-
-                    MapleCustomEncryption.decryptData(ddata);//ok
-                    SeekableLittleEndianAccessor slea = new GenericSeekableLittleEndianAccessor(new ByteArrayByteStream(ddata));
-
-                    int pHeader = slea.readShort();
-                    String opCode = StringUtil.getLeftPaddedStr(Integer.toHexString(pHeader).toUpperCase(), '0', 4);
-                    String opName = send ? lookupRecv(pHeader) : lookupSend(pHeader);
-                    String start = send ? "Sent " : "Received ";
-                    String strStart = start.substring(0, 1);
-                    try {
-                        //FILTER PACKETS
-                        switch (capType) {
-                            case PACKET:
-                                boolean opcodeBlocked;
-                                if (opName.equals("UNKNOWN")) {
-                                    opcodeBlocked = blockedOpcodes.containsKey(strStart + "_" + opCode) ? blockedOpcodes.get(strStart + "_" + opCode) : blockDefault;
-                                } else {
-                                    opcodeBlocked = blockedOpcodes.containsKey(strStart + "_" + opName) ? blockedOpcodes.get(strStart + "_" + opName) : blockDefault;
-                                }
-                                if (!opcodeBlocked) {
-                                    outputWithLogging(start + opName + " [" + opCode + "] (" + packetSize + ") ");
-                                    if (useGUI) {
-                                        MaplePacketRecord record = new MaplePacketRecord();
-                                        record.setCounter(MaplePacketRecord.getCountAndAdd());
-                                        record.setTime(new Date(System.currentTimeMillis()));
-                                        record.setDirection(send ? "ToServer" : "ToClient");
-                                        record.setSend(send);
-                                        record.setOpcode(pHeader);
-                                        record.setHeader(opName);
-                                        record.setPacketData(ddata);
-                                        record.setPacket(packet);
-                                        packetGUI.addRow(record);
-                                        packetGUI.updateAndIncreasePacketTotal();
-                                    }
-                                    if (showHex) {
-                                        outputWithLogging(HexTool.toString(ddata));
-                                    }
-                                    if (showAscii) {
-                                        outputWithLogging(HexTool.toStringFromAscii(ddata));
-                                    }
-                                    outputWithLogging("");
-                                }
-                                break;
-                            case NPC:
-                                if (pHeader == SendPacketOpcode.NPC_TALK.getValue()) {
-                                    addText(slea);
-                                    System.out.println();
-                                }
-                                break;
-                            case SHOP:
-                                if (pHeader == SendPacketOpcode.OPEN_NPC_SHOP.getValue()) {
-                                    addShopSqlQuery(slea);
-                                    outputWithLogging("");
-                                }
-                                break;
-                            case SPEED_QUIZ:
-                                if (pHeader == SendPacketOpcode.NPC_TALK.getValue()) {
-                                    addText(slea);//////////
-                                    System.out.println();
-                                }
-                                break;
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                    return packetSize + 4;
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        } else {
-            //outputWithLogging("Warning: Packet check failed");
-            return 4; // consume the header and hope that it was a retransmission o.o
-        }
-        return 0;
     }
 
     public BufferedWriter getNewWriter(String name, boolean append) {
@@ -675,6 +668,10 @@ public class MaplePcapture implements PcapPacketHandler {
         return serverOutputType;
     }
 
+    public void setResume(boolean isResume) {
+        resume = isResume;
+    }
+    
     public enum CaptureType {
 
         PACKET,

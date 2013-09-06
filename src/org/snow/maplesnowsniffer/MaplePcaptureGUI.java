@@ -29,10 +29,10 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
 
     private static final long serialVersionUID = -722111285770372532L;
     private boolean autoScroll = false;
+    private boolean isStart = true;
     private int packetTotal = 0;
     private MaplePacketStructureViewer structureViewer;
     private MaplePcapture capture;
-    private Lang msg;
 
     /**
      * Creates new form MaplePcaptureGUI
@@ -94,6 +94,7 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
         jTextArea1 = new javax.swing.JTextArea();
         jScrollPane3 = new javax.swing.JScrollPane();
         packetTree = new javax.swing.JTree();
+        setCaptureButton = new javax.swing.JToggleButton();
         jMenuBar1 = new javax.swing.JMenuBar();
         jMenu1 = new javax.swing.JMenu();
         saveMenuItem = new javax.swing.JMenuItem();
@@ -246,6 +247,14 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
     packetTree.setBorder(javax.swing.BorderFactory.createTitledBorder("Packet Tree"));
     jScrollPane3.setViewportView(packetTree);
 
+    setCaptureButton.setSelected(true);
+    setCaptureButton.setText("Stop Now");
+    setCaptureButton.addActionListener(new java.awt.event.ActionListener() {
+        public void actionPerformed(java.awt.event.ActionEvent evt) {
+            setCaptureButtonActionPerformed(evt);
+        }
+    });
+
     jMenu1.setText("File");
 
     saveMenuItem.setText(Lang.get("main.menu.save"));
@@ -354,11 +363,12 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
                                 .addComponent(viewPacketTreeButton, javax.swing.GroupLayout.PREFERRED_SIZE, 1, Short.MAX_VALUE))
                             .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                             .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                .addGroup(layout.createSequentialGroup()
-                                    .addComponent(copyPacketDataButton, javax.swing.GroupLayout.PREFERRED_SIZE, 152, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                    .addGap(107, 107, 107)
-                                    .addComponent(autoScrollButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                                .addComponent(copyPacketDataButton, javax.swing.GroupLayout.PREFERRED_SIZE, 152, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addComponent(blockPacketButton, javax.swing.GroupLayout.PREFERRED_SIZE, 152, javax.swing.GroupLayout.PREFERRED_SIZE))
+                            .addGap(107, 107, 107)
+                            .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                .addComponent(autoScrollButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(setCaptureButton, javax.swing.GroupLayout.DEFAULT_SIZE, 110, Short.MAX_VALUE))
                             .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                             .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                                 .addComponent(viewPacketHeaderButton, javax.swing.GroupLayout.DEFAULT_SIZE, 156, Short.MAX_VALUE)
@@ -394,7 +404,9 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
                             .addComponent(viewPacketTreeButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                             .addComponent(blockPacketButton))
                         .addGroup(layout.createSequentialGroup()
-                            .addComponent(viewBlockedOpcodeButton)
+                            .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                                .addComponent(viewBlockedOpcodeButton)
+                                .addComponent(setCaptureButton))
                             .addGap(0, 0, Short.MAX_VALUE)))
                     .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                     .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 209, javax.swing.GroupLayout.PREFERRED_SIZE))
@@ -585,6 +597,17 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
         JOptionPane.showMessageDialog(null, Lang.get("main.menu.lang.selected"), "INFO", JOptionPane.INFORMATION_MESSAGE);
     }//GEN-LAST:event_lng_VIActionPerformed
 
+    private void setCaptureButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_setCaptureButtonActionPerformed
+        isStart = setCaptureButton.getModel().isSelected();
+        if (isStart) {
+            setCaptureButton.setText(Lang.get("main.button.stop"));
+            capture.setResume(true);
+        } else {
+            setCaptureButton.setText(Lang.get("main.button.resume"));
+            capture.setResume(false);
+        }
+    }//GEN-LAST:event_setCaptureButtonActionPerformed
+
     /**
      * @param args the command line arguments
      */
@@ -598,15 +621,12 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
 
     public void addRow(MaplePacketRecord record) {
         addRow(record.getRowData());
-    }
-
-    public void addRow(Object[] rowData) {
         int row = packetTable.getRowCount();
+        if (autoScroll) packetTable.scrollRectToVisible(packetTable.getCellRect(row, 0, true));
+    }
+    
+    public void addRow(Object[] rowData) {
         ((DefaultTableModel) packetTable.getModel()).addRow(rowData);
-        if (autoScroll) {
-            packetTable.changeSelection(row, 0, false, false);
-            packetTable.scrollRectToVisible(packetTable.getCellRect(row, 0, true));
-        }
     }
     
     public void removeAllRow() {
@@ -677,6 +697,9 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
     
     public MaplePcapture getCapture() {
         return capture;
+    }
+    public boolean isStart() {
+        return isStart;
     }
 
     public void setCapture(MaplePcapture capture) {
@@ -753,6 +776,7 @@ public class MaplePcaptureGUI extends javax.swing.JFrame {
     private javax.swing.JTree packetTree;
     private javax.swing.JMenuItem resetPacketCountMenuItem;
     private javax.swing.JMenuItem saveMenuItem;
+    private javax.swing.JToggleButton setCaptureButton;
     public javax.swing.JLabel statusLabel;
     public static javax.swing.JButton viewBlockedOpcodeButton;
     public static javax.swing.JButton viewPacketHeaderButton;
